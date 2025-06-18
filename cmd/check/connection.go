@@ -29,10 +29,15 @@ func New() *cobra.Command {
 	return cmd
 }
 
+type Connection interface {
+	CheckConnection() error
+	GetDescription() string
+}
+
 type Resource struct {
 	Type      string
 	IsChecked bool
-	Config    any
+	Config    Connection
 }
 
 // HTTPConfig represents configuration for HTTP connection
@@ -42,68 +47,12 @@ type HTTPConfig struct {
 	Timeout time.Duration
 }
 
-// MySQLConfig represents configuration for MySQL connection
-type MySQLConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	Database string
-}
-
-// RedisConfig represents configuration for Redis connection
-type RedisConfig struct {
-	Host     string
-	Port     int
-	Password string
-	DB       int
-}
-
-// PubSubConfig represents configuration for Google Cloud Pub/Sub connection
-type PubSubConfig struct {
-	ProjectID       string
-	CredentialsFile string
-	TopicID         string
-}
-
-// CheckConnection validates the connection based on resource type
-func (r *Resource) CheckConnection() error {
-	switch r.Type {
-	case "http":
-		config, ok := r.Config.(HTTPConfig)
-		if !ok {
-			return fmt.Errorf("invalid HTTP config type")
-		}
-		return checkHTTPConnection(config)
-	case "mysql":
-		config, ok := r.Config.(MySQLConfig)
-		if !ok {
-			return fmt.Errorf("invalid MySQL config type")
-		}
-		return checkMySQLConnection(config)
-	case "redis":
-		config, ok := r.Config.(RedisConfig)
-		if !ok {
-			return fmt.Errorf("invalid Redis config type")
-		}
-		return checkRedisConnection(config)
-	case "pubsub":
-		config, ok := r.Config.(PubSubConfig)
-		if !ok {
-			return fmt.Errorf("invalid PubSub config type")
-		}
-		return checkPubSubConnection(config)
-	default:
-		return fmt.Errorf("unsupported resource type: %s", r.Type)
-	}
-}
-
-func checkHTTPConnection(config HTTPConfig) error {
+func (c *HTTPConfig) CheckConnection() error {
 	client := &http.Client{
-		Timeout: config.Timeout,
+		Timeout: c.Timeout,
 	}
 
-	resp, err := client.Get(config.URL)
+	resp, err := client.Get(c.URL)
 	if err != nil {
 		return fmt.Errorf("HTTP connection failed: %v", err)
 	}
@@ -115,9 +64,22 @@ func checkHTTPConnection(config HTTPConfig) error {
 	return nil
 }
 
-func checkMySQLConnection(config MySQLConfig) error {
+func (c *HTTPConfig) GetDescription() string {
+	return c.Method + ":" + c.URL
+}
+
+// MySQLConfig represents configuration for MySQL connection
+type MySQLConfig struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	Database string
+}
+
+func (c *MySQLConfig) CheckConnection() error {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=5s",
-		config.User, config.Password, config.Host, config.Port, config.Database)
+		c.User, c.Password, c.Host, c.Port, c.Database)
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
@@ -132,11 +94,23 @@ func checkMySQLConnection(config MySQLConfig) error {
 	return nil
 }
 
-func checkRedisConnection(config RedisConfig) error {
+func (c *MySQLConfig) GetDescription() string {
+	return fmt.Sprintf("mysql://%s@%s:%d/%s", c.User, c.Host, c.Port, c.Database)
+}
+
+// RedisConfig represents configuration for Redis connection
+type RedisConfig struct {
+	Host     string
+	Port     int
+	Password string
+	DB       int
+}
+
+func (c *RedisConfig) CheckConnection() error {
 	client := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", config.Host, config.Port),
-		Password: config.Password,
-		DB:       config.DB,
+		Addr:     fmt.Sprintf("%s:%d", c.Host, c.Port),
+		Password: c.Password,
+		DB:       c.DB,
 	})
 	defer client.Close()
 
@@ -147,19 +121,30 @@ func checkRedisConnection(config RedisConfig) error {
 	return nil
 }
 
-func checkPubSubConnection(config PubSubConfig) error {
+func (c *RedisConfig) GetDescription() string {
+	return fmt.Sprintf("redis://%s:%d/%d", c.Host, c.Port, c.DB)
+}
+
+// PubSubConfig represents configuration for Google Cloud Pub/Sub connection
+type PubSubConfig struct {
+	ProjectID       string
+	CredentialsFile string
+	TopicID         string
+}
+
+func (c *PubSubConfig) CheckConnection() error {
 	ctx := context.Background()
 
 	// 创建 Pub/Sub 客户端
 	var client *pubsub.Client
 	var err error
 
-	if config.CredentialsFile != "" {
+	if c.CredentialsFile != "" {
 		// 使用指定的凭证文件
-		client, err = pubsub.NewClient(ctx, config.ProjectID, option.WithCredentialsFile(config.CredentialsFile))
+		client, err = pubsub.NewClient(ctx, c.ProjectID, option.WithCredentialsFile(c.CredentialsFile))
 	} else {
 		// 使用默认凭证
-		client, err = pubsub.NewClient(ctx, config.ProjectID)
+		client, err = pubsub.NewClient(ctx, c.ProjectID)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to create Pub/Sub client: %v", err)
@@ -167,16 +152,20 @@ func checkPubSubConnection(config PubSubConfig) error {
 	defer client.Close()
 
 	// 检查主题是否存在
-	topic := client.Topic(config.TopicID)
+	topic := client.Topic(c.TopicID)
 	exists, err := topic.Exists(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to check topic existence: %v", err)
 	}
 	if !exists {
-		return fmt.Errorf("topic %s does not exist", config.TopicID)
+		return fmt.Errorf("topic %s does not exist", c.TopicID)
 	}
 
 	return nil
+}
+
+func (c *PubSubConfig) GetDescription() string {
+	return fmt.Sprintf("pubsub://%s/topics/%s", c.ProjectID, c.TopicID)
 }
 
 type ConnectionConfig struct {
@@ -239,7 +228,7 @@ func createResource(name string, config ConnectionConfig) (*Resource, error) {
 
 	switch config.Type {
 	case "mysql":
-		resource.Config = MySQLConfig{
+		resource.Config = &MySQLConfig{
 			Host:     config.Host,
 			Port:     config.Port,
 			User:     config.User,
@@ -251,20 +240,20 @@ func createResource(name string, config ConnectionConfig) (*Resource, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid timeout format: %v", err)
 		}
-		resource.Config = HTTPConfig{
+		resource.Config = &HTTPConfig{
 			URL:     config.URL,
 			Method:  config.Method,
 			Timeout: timeout,
 		}
 	case "redis":
-		resource.Config = RedisConfig{
+		resource.Config = &RedisConfig{
 			Host:     config.Host,
 			Port:     config.Port,
 			Password: config.Password,
 			DB:       config.DB,
 		}
 	case "pubsub":
-		resource.Config = PubSubConfig{
+		resource.Config = &PubSubConfig{
 			ProjectID:       config.ProjectID,
 			CredentialsFile: config.CredentialsFile,
 			TopicID:         config.TopicID,
@@ -290,7 +279,7 @@ func newConnection() *cobra.Command {
 			// 创建表格
 			t := table.NewWriter()
 			t.SetOutputMirror(os.Stdout)
-			t.AppendHeader(table.Row{"Name", "Type", "Status"})
+			t.AppendHeader(table.Row{"Name", "Type", "Description", "Status"})
 			t.SetStyle(table.StyleLight)
 
 			// 检查每个连接
@@ -300,6 +289,7 @@ func newConnection() *cobra.Command {
 					t.AppendRow(table.Row{
 						name,
 						connConfig.Type,
+						"",
 						text.FgRed.Sprintf("Error: %v", err),
 					})
 					continue
@@ -310,22 +300,25 @@ func newConnection() *cobra.Command {
 					t.AppendRow(table.Row{
 						name,
 						connConfig.Type,
+						resource.Config.GetDescription(),
 						text.FgYellow.Sprint("Skipped"),
 					})
 					continue
 				}
 
-				err = resource.CheckConnection()
+				err = resource.Config.CheckConnection()
 				if err != nil {
 					t.AppendRow(table.Row{
 						name,
 						connConfig.Type,
+						resource.Config.GetDescription(),
 						text.FgRed.Sprintf("Failed: %v", err),
 					})
 				} else {
 					t.AppendRow(table.Row{
 						name,
 						connConfig.Type,
+						resource.Config.GetDescription(),
 						text.FgGreen.Sprint("Connected"),
 					})
 				}
