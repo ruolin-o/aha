@@ -1,0 +1,26 @@
+check:
+  connections:
+    base:
+      type: mysql
+      host: localhost
+      port: 3306
+      user: aa
+      password: 11
+      database: athena
+    rbac_http:
+      type: http
+      url: xxxx
+      method: get
+      timeout: 2s
+    cache:
+      type: redis
+      host: localhost
+      port: 6379
+      password: xx
+      db: 0
+    pubsub:
+      type: pubsub
+      project_id: athena-dev
+      credentials_file: /Users/zhaoyu/Downloads/athena-dev-440110-1234567890.json
+      topic_id: athena-dev-topic
+

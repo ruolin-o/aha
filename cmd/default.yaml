@@ -1,0 +1,29 @@
+check:
+  connections:
+    base:
+      type: mysql
+      is_checked: true
+      host: 10.100.1.11
+      port: 3306
+      user: kathena
+      password: YTJGMGF1H2VnVZUT
+      database: valora
+    rbac_http:
+      type: http
+      is_checked: true
+      url: https://pixocialllllllllll.com
+      method: get
+      timeout: 2s
+    cache:
+      type: redis
+      is_checked: true
+      host: 127.0.0.1
+      port: 6379
+      db: 0
+    pubsub:
+      type: pubsub
+      is_checked: false
+      project_id: athena-dev
+      credentials_file: /Users/zhaoyu/Downloads/athena-dev-440110-1234567890.json
+      topic_id: athena-dev-topic
+
