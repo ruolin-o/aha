@@ -128,7 +128,7 @@ func (c *RedisConfig) GetDescription() string {
 // PubSubConfig represents configuration for Google Cloud Pub/Sub connection
 type PubSubConfig struct {
 	ProjectID       string
-	CredentialsFile string
+	CredentialsJSON string
 	TopicID         string
 }
 
@@ -139,9 +139,9 @@ func (c *PubSubConfig) CheckConnection() error {
 	var client *pubsub.Client
 	var err error
 
-	if c.CredentialsFile != "" {
-		// 使用指定的凭证文件
-		client, err = pubsub.NewClient(ctx, c.ProjectID, option.WithCredentialsFile(c.CredentialsFile))
+	if c.CredentialsJSON != "" {
+		// 使用 JSON 凭证
+		client, err = pubsub.NewClient(ctx, c.ProjectID, option.WithCredentialsJSON([]byte(c.CredentialsJSON)))
 	} else {
 		// 使用默认凭证
 		client, err = pubsub.NewClient(ctx, c.ProjectID)
@@ -181,7 +181,7 @@ type ConnectionConfig struct {
 	Timeout         string
 	DB              int
 	ProjectID       string
-	CredentialsFile string
+	CredentialsJSON string
 	TopicID         string
 }
 
@@ -212,7 +212,7 @@ func parseConfig(configPath string) (map[string]ConnectionConfig, error) {
 			Timeout:         v.GetString(prefix + ".timeout"),
 			DB:              v.GetInt(prefix + ".db"),
 			ProjectID:       v.GetString(prefix + ".project_id"),
-			CredentialsFile: v.GetString(prefix + ".credentials_file"),
+			CredentialsJSON: v.GetString(prefix + ".credentials_json"),
 			TopicID:         v.GetString(prefix + ".topic_id"),
 		}
 		connections[name] = config
@@ -255,7 +255,7 @@ func createResource(name string, config ConnectionConfig) (*Resource, error) {
 	case "pubsub":
 		resource.Config = &PubSubConfig{
 			ProjectID:       config.ProjectID,
-			CredentialsFile: config.CredentialsFile,
+			CredentialsJSON: config.CredentialsJSON,
 			TopicID:         config.TopicID,
 		}
 	default:
