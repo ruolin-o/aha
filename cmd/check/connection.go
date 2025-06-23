@@ -25,6 +25,7 @@ func New() *cobra.Command {
 	}
 
 	cmd.AddCommand(newConnection())
+	cmd.AddCommand(newTableSummary())
 
 	return cmd
 }
@@ -154,6 +155,7 @@ func (c *PubSubConfig) CheckConnection() error {
 	// 检查主题是否存在
 	topic := client.Topic(c.TopicID)
 	exists, err := topic.Exists(ctx)
+
 	if err != nil {
 		return fmt.Errorf("failed to check topic existence: %v", err)
 	}
